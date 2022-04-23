@@ -1,16 +1,19 @@
 package com.exercise.dealersolution.business;
 
+import static java.util.Collections.emptyList;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
-import com.exercise.dealersolution.repository.Product;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.Month;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,76 +23,89 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class ProductControllerTest {
 
-  @Mock
-  private Product productRepository;
+    private final SimpleDateFormat formatter = new SimpleDateFormat("dd/MM/yyyy");
 
-  @InjectMocks
-  private ProductController productController;
+    @Mock
+    private ProductService productService;
 
-  @Test
-  void shouldGetAllProducts() {
-    final Map<Integer, String[]> products = new HashMap<Integer, String[]>()
-    {{
-      put(1, new String[]{"SUV", "1", "120,000.00", "100", "31/12/2022"});
-      put(2, new String[]{"Sedan", "1", "100,000.00", "100", "20/11/2022"});
-      put(3, new String[]{"Hatch1", "0", "40.000,00", "100", "31/12/2099"});
-    }};
-    given(productRepository.todos()).willReturn(products);
+    @InjectMocks
+    private ProductController productController;
 
-    final Map<Integer, String[]> retrievedObjects = productController.retrieveAll();
+    @Test
+    void shouldGetAllProducts() throws ParseException {
+        final Collection<ProductModel> expected = Arrays.asList(
+                new ProductModel(1L, "SUV", ProductStatus.IN_TRANSPORT, BigDecimal.valueOf(120000L), BigInteger.valueOf(100), formatter.parse("31/12/2022")),
+                new ProductModel(2L, "Sedan", ProductStatus.IN_TRANSPORT, BigDecimal.valueOf(100000L), BigInteger.valueOf(100), formatter.parse("20/11/2022")),
+                new ProductModel(3L, "Hatch1", ProductStatus.OUTDATED, BigDecimal.valueOf(40000L), BigInteger.valueOf(100), formatter.parse("31/12/2099"))
+        );
+        given(productService.findAllProducts()).willReturn(expected);
 
-    assertEquals(products, retrievedObjects);
-  }
+        final Collection<ProductModel> actual = productController.retrieveAll();
+        assertEquals(expected, actual);
+    }
 
-  @Test
-  void shouldGetAllAvailableProducts() {
-    List<List<String>> expected = new ArrayList<>();
-    expected.add(Arrays.asList("1","SUV", "1", "120,000.00", "100", "31/12/2022"));
-    expected.add(Arrays.asList("2","Sedan", "1", "100,000.00", "100", "20/11/2022"));
+    @Test
+    void shouldGetAllAvailableProducts() throws ParseException {
+        final Collection<ProductModel> expected = Arrays.asList(
+                new ProductModel(1L, "SUV", ProductStatus.AVAILABLE, BigDecimal.valueOf(120000L), BigInteger.valueOf(100), formatter.parse("31/12/2022")),
+                new ProductModel(2L, "Sedan", ProductStatus.AVAILABLE, BigDecimal.valueOf(100000L), BigInteger.valueOf(100), formatter.parse("20/11/2022"))
+        );
+        given(productService.retrieveAvailableProducts()).willReturn(expected);
 
-    final Map<Integer, String[]> products = new HashMap<Integer, String[]>()
-    {{
-      put(1, new String[]{"SUV", "1", "120,000.00", "100", "31/12/2022"});
-      put(2, new String[]{"Sedan", "1", "100,000.00", "100", "20/11/2022"});
-    }};
-    given(productRepository.getAvailableProducts()).willReturn(products);
+        final Collection<ProductModel> availableProducts = productController.retrieveAvailable();
 
-    final List<List<String>> availableProducts = productController.getAll();
+        assertEquals(expected, availableProducts);
+    }
 
-    assertTrue(!availableProducts.isEmpty());
-  }
+    @Test
+    void shouldRetrieveDeadline() throws ParseException {
+        LocalDate expectedDeadline = LocalDate.of(2022, Month.DECEMBER, 31);
+        given(productService.getProductDeadline(any())).willReturn(expectedDeadline);
+        final LocalDate retrieveDeadline = productController.getProductDeadline(1L);
+        assertEquals(expectedDeadline, retrieveDeadline);
+    }
 
-  @Test
-  void shouldRetrieveDeadline() {
-    LocalDate expectedDeadline = LocalDate.of(2022, Month.DECEMBER, 31);
-    final Map<Integer, String[]> products = new HashMap<Integer, String[]>()
-    {{
-      put(1, new String[]{"SUV", "1", "120,000.00", "100", "31/12/2022"});
-    }};
-    given(productRepository.retrieveUnavailable()).willReturn(products);
+    @Test
+    void shouldAddNewProductModel() throws ParseException {
+        ProductModel newProduct = new ProductModel(2L, "SUV", ProductStatus.IN_TRANSPORT, BigDecimal.valueOf(120000L), BigInteger.valueOf(100), formatter.parse("31/12/2022"));
+        productController.addNewProductModel(newProduct);
+        verify(productService).addProduct(newProduct);
+    }
 
-    final LocalDate retrieveDeadline = productController.retrieveDeadline("1");
+    @Test
+    void shouldDeleteAllProducts() {
+        productController.deleteMany("");
+        verify(productService).deleteProducts(emptyList());
+    }
 
-    assertEquals(expectedDeadline, retrieveDeadline);
-  }
+    @Test
+    void shouldDeleteManyProducts() {
+        productController.deleteMany("1,2,3");
+        verify(productService).deleteProducts(Arrays.asList(1L, 2L, 3L));
+    }
 
-  @Test
-  void shouldAddNewProductModel() {
-  }
+    @Test
+    void shouldDeleteSpecificProduct() {
+        productController.delete(1L);
+        verify(productService).deleteProduct(1L);
+    }
 
-  @Test
-  void shouldDeleteAllProducts() {
-  }
+    @Test
+    void shouldUpdateProduct() throws ParseException {
+        ProductModel product = new ProductModel(1L, "SUV", ProductStatus.AVAILABLE, BigDecimal.valueOf(140000L), BigInteger.valueOf(100), formatter.parse("31/12/2022"));
+        productController.updateProduct(1L, product);
+        verify(productService).updateProduct(1L, product);
+    }
 
-  @Test
-  void shouldDeleteSpecificProduct() {
-  }
+    @Test
+    void shouldUpdatePriceProduct() {
+        productController.updateProductPrice(1L, BigDecimal.valueOf(140000L));
+        verify(productService).updatePrice(1L, BigDecimal.valueOf(140000L));
+    }
 
-  @Test
-  void shouldUpdateProduct() {
-  }
-
-  @Test
-  void shouldUpdatePriceProduct() {
-  }
+    @Test
+    void shouldRetrieveSorted() {
+        productController.retrieveAvailableSorted();
+        verify(productService).findAvailableSorted();
+    }
 }
